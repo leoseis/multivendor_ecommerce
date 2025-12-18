@@ -39,10 +39,11 @@ class Category(models.Model):
 
 class Product(models.Model):
     vendor = models.ForeignKey(
-        'accounts.Vendor',
+        Vendor,
         on_delete=models.CASCADE,
         related_name='products'
     )
+
     category = models.ForeignKey(
         Category,
         on_delete=models.SET_NULL,
@@ -111,7 +112,7 @@ class OrderItem(models.Model):
         related_name='items'
     )
     vendor = models.ForeignKey(
-        'accounts.Vendor',
+        'Vendor',
         on_delete=models.CASCADE
     )
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
