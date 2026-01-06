@@ -34,6 +34,14 @@ def create_vendor(request):
     return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def current_user(request):
+    serializer = UserSerializer(request.user)
+    return Response(serializer.data)
+
+
+
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -58,7 +66,6 @@ def create_product(request):
 
     serializer = ProductSerializer(product)
     return Response(serializer.data, status=status.HTTP_201_CREATED)
-
 
 
 @api_view(['GET'])
