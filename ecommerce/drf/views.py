@@ -1,14 +1,52 @@
-from django.shortcuts import render
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework import status
+from django.contrib.auth import authenticate, login as django_login
+from django.contrib.auth import get_user_model
 
-from .models import *
-from .serializers import *
+from .models import Vendor, Product, Cart, CartItem, Order, OrderItem, Review
+from .serializers import (
+    RegisterSerializer, UserSerializer, VendorSerializer, ProductSerializer, OrderSerializer
+)
+
+User = get_user_model()
+
+# --------------------
+# Auth
+# --------------------
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def register(request):
+    serializer = RegisterSerializer(data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response({"message": "User created successfully"}, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def login(request):
+    username = request.data.get('username')
+    password = request.data.get('password')
+
+    user = authenticate(request, username=username, password=password)
+    if user is not None:
+        django_login(request, user)
+        serializer = UserSerializer(user)
+        return Response({"message": "Login successful", "user": serializer.data})
+    return Response({"error": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def current_user(request):
+    serializer = UserSerializer(request.user)
+    return Response(serializer.data)
 
 
-
+# --------------------
+# Vendor
+# --------------------
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def create_vendor(request):
@@ -16,17 +54,9 @@ def create_vendor(request):
     description = request.data.get('description')
 
     if not store_name:
-        return Response(
-            {'error': 'Store name is required'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
+        return Response({"error": "Store name is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-    vendor = Vendor.objects.create(
-        user=request.user,
-        store_name=store_name,
-        description=description
-    )
-
+    vendor = Vendor.objects.create(user=request.user, store_name=store_name, description=description)
     request.user.is_vendor = True
     request.user.save()
 
@@ -34,26 +64,16 @@ def create_vendor(request):
     return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
-@api_view(["GET"])
-@permission_classes([IsAuthenticated])
-def current_user(request):
-    serializer = UserSerializer(request.user)
-    return Response(serializer.data)
-
-
-
-
+# --------------------
+# Product
+# --------------------
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def create_product(request):
     if not request.user.is_vendor:
-        return Response(
-            {'error': 'Only vendors can add products'},
-            status=status.HTTP_403_FORBIDDEN
-        )
+        return Response({"error": "Only vendors can add products"}, status=status.HTTP_403_FORBIDDEN)
 
     vendor = Vendor.objects.get(user=request.user)
-
     product = Product.objects.create(
         vendor=vendor,
         name=request.data.get('name'),
@@ -67,7 +87,6 @@ def create_product(request):
     serializer = ProductSerializer(product)
     return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-
 @api_view(['GET'])
 def product_list(request):
     products = Product.objects.filter(is_available=True)
@@ -75,7 +94,9 @@ def product_list(request):
     return Response(serializer.data)
 
 
-
+# --------------------
+# Cart
+# --------------------
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def add_to_cart(request):
@@ -85,20 +106,17 @@ def add_to_cart(request):
     cart, _ = Cart.objects.get_or_create(user=request.user)
     product = Product.objects.get(id=product_id)
 
-    cart_item, created = CartItem.objects.get_or_create(
-        cart=cart,
-        product=product
-    )
-
+    cart_item, created = CartItem.objects.get_or_create(cart=cart, product=product)
     if not created:
         cart_item.quantity += quantity
     cart_item.save()
 
-    return Response({'message': 'Item added to cart'})
+    return Response({"message": "Item added to cart"})
 
 
-
-
+# --------------------
+# Order
+# --------------------
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def create_order(request):
@@ -106,7 +124,7 @@ def create_order(request):
     items = cart.items.all()
 
     if not items:
-        return Response({'error': 'Cart is empty'})
+        return Response({"error": "Cart is empty"}, status=status.HTTP_400_BAD_REQUEST)
 
     total = 0
     order = Order.objects.create(user=request.user, total_price=0)
@@ -123,14 +141,15 @@ def create_order(request):
 
     order.total_price = total
     order.save()
-
     items.delete()
 
     serializer = OrderSerializer(order)
     return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
-
+# --------------------
+# Review
+# --------------------
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def add_review(request):
@@ -140,6 +159,4 @@ def add_review(request):
         rating=request.data.get('rating'),
         comment=request.data.get('comment')
     )
-    return Response({'message': 'Review added'})
-
-# Create your views her
+    return Response({"message": "Review added"})
