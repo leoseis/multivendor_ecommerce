@@ -1,37 +1,31 @@
 from django.urls import path
+from rest_framework_simplejwt.views import (
+    TokenObtainPairView,
+    TokenRefreshView,
+)
+
 from . import views
 
 urlpatterns = [
-    # --------------------
-    # Auth
-    # --------------------
-    path('register/', views.register, name='register'),
-    path('login/', views.login, name='login'),
-    path('user/', views.current_user, name='current_user'),
+    # AUTH
+    path("register/", views.register, name="register"),
+    path("login/", TokenObtainPairView.as_view(), name="login"),
+    path("token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
+    path("user/", views.current_user, name="current_user"),
 
-    # --------------------
-    # Vendor
-    # --------------------
-    path('vendor/create/', views.create_vendor, name='create_vendor'),
+    # VENDOR
+    path("vendor/create/", views.create_vendor, name="create_vendor"),
 
-    # --------------------
-    # Products
-    # --------------------
-    path('products/', views.product_list, name='product_list'),
-    path('product/create/', views.create_product, name='create_product'),
+    # PRODUCTS
+    path("products/", views.product_list, name="product_list"),
+    path("products/create/", views.create_product, name="create_product"),
 
-    # --------------------
-    # Cart
-    # --------------------
-    path('cart/add/', views.add_to_cart, name='add_to_cart'),
+    # CART
+    path("cart/add/", views.add_to_cart, name="add_to_cart"),
 
-    # --------------------
-    # Orders
-    # --------------------
-    path('order/create/', views.create_order, name='create_order'),
+    # ORDER
+    path("order/create/", views.create_order, name="create_order"),
 
-    # --------------------
-    # Reviews
-    # --------------------
-    path('review/add/', views.add_review, name='add_review'),
+    # REVIEW
+    path("review/add/", views.add_review, name="add_review"),
 ]
