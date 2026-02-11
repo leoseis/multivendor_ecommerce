@@ -4,6 +4,10 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.decorators import api_view, permission_classes
+from .permissions import IsVendor
+
 
 from django.contrib.auth import get_user_model
 
@@ -127,13 +131,8 @@ def product_list(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsVendor])
 def create_product(request):
-    if not request.user.is_vendor:
-        return Response(
-            {"error": "Only vendors can add products"},
-            status=status.HTTP_403_FORBIDDEN,
-        )
 
     vendor = Vendor.objects.get(user=request.user)
 
@@ -230,3 +229,14 @@ def add_review(request):
         {"message": "Review added successfully"},
         status=status.HTTP_201_CREATED,
     )
+
+
+
+
+
+
+
+
+
+
+    
