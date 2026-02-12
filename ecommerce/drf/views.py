@@ -98,6 +98,13 @@ def current_user(request):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def create_vendor(request):
+
+    if request.user.is_vendor:
+        return Response(
+            {"error": "You are already a vendor."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
     store_name = request.data.get("store_name")
     description = request.data.get("description", "")
 
@@ -118,7 +125,6 @@ def create_vendor(request):
 
     serializer = VendorSerializer(vendor)
     return Response(serializer.data, status=status.HTTP_201_CREATED)
-
 
 # =========================
 # PRODUCTS
@@ -229,6 +235,29 @@ def add_review(request):
         {"message": "Review added successfully"},
         status=status.HTTP_201_CREATED,
     )
+
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsVendor])
+def vendor_dashboard(request):
+
+    vendor = Vendor.objects.get(user=request.user)
+
+    products = Product.objects.filter(vendor=vendor)
+    orders = OrderItem.objects.filter(vendor=vendor)
+
+    total_revenue = sum(
+        item.price * item.quantity for item in orders
+    )
+
+    return Response({
+        "store_name": vendor.store_name,
+        "total_products": products.count(),
+        "total_orders": orders.count(),
+        "total_revenue": total_revenue,
+    })
+
 
 
 

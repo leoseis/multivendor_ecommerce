@@ -24,4 +24,6 @@ urlpatterns = [
 
     # REVIEW
     path("review/add/", views.add_review, name="add_review"),
+    path("vendor/dashboard/", views.vendor_dashboard),
+
 ]
