@@ -1,29 +1,30 @@
-from django.urls import path
+from django.urls import path, include
 from rest_framework_simplejwt.views import TokenRefreshView
+from rest_framework.routers import DefaultRouter
 from . import views
+from .views import ProductViewSet, OrderViewSet
+
+router = DefaultRouter()
+router.register("products", ProductViewSet, basename="products")
+router.register("orders", OrderViewSet, basename="orders")
 
 urlpatterns = [
     # AUTH
-    path("login/", views.login, name="login"),
-    path("register/", views.register, name="register"),
-    path("token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
-    path("user/", views.current_user, name="current_user"),
+    path("login/", views.login),
+    path("register/", views.register),
+    path("token/refresh/", TokenRefreshView.as_view()),
+    path("user/", views.current_user),
 
     # VENDOR
-    path("vendor/create/", views.create_vendor, name="create_vendor"),
-
-    # PRODUCTS
-    path("products/", views.product_list, name="product_list"),
-    path("products/create/", views.create_product, name="create_product"),
-
-    # CART
-    path("cart/add/", views.add_to_cart, name="add_to_cart"),
-
-    # ORDER
-    path("order/create/", views.create_order, name="create_order"),
-
-    # REVIEW
-    path("review/add/", views.add_review, name="add_review"),
+    path("vendor/create/", views.create_vendor),
     path("vendor/dashboard/", views.vendor_dashboard),
 
+    # CART
+    path("cart/add/", views.add_to_cart),
+
+    # REVIEW
+    path("review/add/", views.add_review),
+
+    # ROUTER URLs
+    path("", include(router.urls)),
 ]

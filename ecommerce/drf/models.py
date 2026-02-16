@@ -93,6 +93,9 @@ class Cart(models.Model):
         related_name="cart"
     )
 
+    def __str__(self):
+        return f"{self.user.username}'s cart"
+
 
 class CartItem(models.Model):
     cart = models.ForeignKey(
@@ -103,34 +106,58 @@ class CartItem(models.Model):
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
     quantity = models.PositiveIntegerField(default=1)
 
+    def __str__(self):
+        return f"{self.product.name} x {self.quantity}"
 
-class Order(models.Model):
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name="orders"
-    )
-    total_price = models.DecimalField(max_digits=10, decimal_places=2)
-    created_at = models.DateTimeField(auto_now_add=True)
 
 
 class OrderItem(models.Model):
     order = models.ForeignKey(
-        Order,
+        "Order",
         on_delete=models.CASCADE,
-        related_name="items"
+        related_name="items"   # ✅ important for reverse access
     )
     vendor = models.ForeignKey(Vendor, on_delete=models.CASCADE)
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
     price = models.DecimalField(max_digits=10, decimal_places=2)
     quantity = models.PositiveIntegerField()
 
+    def __str__(self):
+        return f"{self.product.name} x {self.quantity}"
+
+
 
 class Review(models.Model):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE
+        on_delete=models.CASCADE,
+        related_name="reviews"
     )
-    product = models.ForeignKey(Product, on_delete=models.CASCADE)
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name="reviews"
+    )
     rating = models.PositiveIntegerField()
     comment = models.TextField(blank=True)
+
+
+class Order(models.Model):
+
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("processing", "Processing"),
+        ("shipped", "Shipped"),
+        ("delivered", "Delivered"),
+        ("cancelled", "Cancelled"),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    total_price = models.DecimalField(max_digits=10, decimal_places=2)
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default="pending"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+

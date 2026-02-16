@@ -7,6 +7,11 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import api_view, permission_classes
 from .permissions import IsVendor
+from rest_framework import viewsets
+from rest_framework.permissions import IsAuthenticatedOrReadOnly
+from rest_framework.exceptions import PermissionDenied
+
+
 
 
 from django.contrib.auth import get_user_model
@@ -129,31 +134,23 @@ def create_vendor(request):
 # =========================
 # PRODUCTS
 # =========================
-@api_view(["GET"])
-def product_list(request):
-    products = Product.objects.filter(is_available=True)
-    serializer = ProductSerializer(products, many=True)
-    return Response(serializer.data)
+class ProductViewSet(viewsets.ModelViewSet):
+    queryset = Product.objects.filter(is_available=True)
+    serializer_class = ProductSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
 
+    def perform_create(self, serializer):
+        if not self.request.user.is_vendor:
+            raise PermissionDenied("Only vendors can create products.")
 
-@api_view(["POST"])
-@permission_classes([IsAuthenticated, IsVendor])
-def create_product(request):
+        vendor = Vendor.objects.get(user=self.request.user)
+        serializer.save(vendor=vendor)
 
-    vendor = Vendor.objects.get(user=request.user)
+    def get_permissions(self):
+        if self.action in ["update", "partial_update", "destroy"]:
+            return [IsAuthenticated(), IsVendorOwner()]
+        return super().get_permissions()
 
-    product = Product.objects.create(
-        vendor=vendor,
-        name=request.data.get("name"),
-        slug=request.data.get("slug"),
-        description=request.data.get("description"),
-        price=request.data.get("price"),
-        stock=request.data.get("stock"),
-        category_id=request.data.get("category"),
-    )
-
-    serializer = ProductSerializer(product)
-    return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
 # =========================
@@ -184,38 +181,25 @@ def add_to_cart(request):
 # =========================
 # ORDER
 # =========================
-@api_view(["POST"])
-@permission_classes([IsAuthenticated])
-def create_order(request):
-    cart = Cart.objects.get(user=request.user)
-    items = cart.items.all()
+class OrderViewSet(viewsets.ModelViewSet):
+    queryset = Order.objects.all()
+    serializer_class = OrderSerializer
+    permission_classes = [IsAuthenticated]
 
-    if not items.exists():
-        return Response(
-            {"error": "Cart is empty"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+    def get_queryset(self):
+        # Customer sees only their orders
+        if not self.request.user.is_vendor:
+            return Order.objects.filter(user=self.request.user)
 
-    total_price = 0
-    order = Order.objects.create(user=request.user, total_price=0)
+        # Vendor sees orders related to their products
+        return Order.objects.filter(
+            orderitem__vendor__user=self.request.user
+        ).distinct()
 
-    for item in items:
-        OrderItem.objects.create(
-            order=order,
-            vendor=item.product.vendor,
-            product=item.product,
-            price=item.product.price,
-            quantity=item.quantity,
-        )
-        total_price += item.product.price * item.quantity
-
-    order.total_price = total_price
-    order.save()
-
-    items.delete()
-
-    serializer = OrderSerializer(order)
-    return Response(serializer.data, status=status.HTTP_201_CREATED)
+    def perform_update(self, serializer):
+        if not self.request.user.is_vendor:
+            raise PermissionDenied("Only vendors can update order status.")
+        serializer.save()
 
 
 # =========================

@@ -1,5 +1,6 @@
 from rest_framework.permissions import BasePermission
 
+
 class IsVendor(BasePermission):
     message = "You must be a vendor to perform this action."
 
