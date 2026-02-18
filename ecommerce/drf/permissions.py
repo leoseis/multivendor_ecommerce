@@ -9,4 +9,7 @@ class IsVendor(BasePermission):
             request.user
             and request.user.is_authenticated
             and getattr(request.user, "is_vendor", False)
+
+
+        
         )

@@ -1,31 +1,14 @@
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework import viewsets
+from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly
+from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.response import Response
 from rest_framework import status
-from django.contrib.auth import authenticate
-from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.decorators import api_view, permission_classes
-from .permissions import IsVendor
-from rest_framework import viewsets
-from rest_framework.permissions import IsAuthenticatedOrReadOnly
 from rest_framework.exceptions import PermissionDenied
+from django.db import transaction
+from django.contrib.auth import authenticate, get_user_model
+from rest_framework_simplejwt.tokens import RefreshToken
 
-
-
-
-from django.contrib.auth import get_user_model
-
-from .models import (
-    Vendor,
-    Product,
-    Cart,
-    CartItem,
-    Order,
-    OrderItem,
-    Review,
-)
-
+from .models import Vendor, Product, Cart, CartItem, Order, OrderItem, Review
 from .serializers import (
     RegisterSerializer,
     UserSerializer,
@@ -33,8 +16,10 @@ from .serializers import (
     ProductSerializer,
     OrderSerializer,
 )
+from .permissions import IsVendor  # make sure this exists
 
 User = get_user_model()
+
 
 
 
@@ -146,10 +131,6 @@ class ProductViewSet(viewsets.ModelViewSet):
         vendor = Vendor.objects.get(user=self.request.user)
         serializer.save(vendor=vendor)
 
-    def get_permissions(self):
-        if self.action in ["update", "partial_update", "destroy"]:
-            return [IsAuthenticated(), IsVendorOwner()]
-        return super().get_permissions()
 
 
 
@@ -181,25 +162,7 @@ def add_to_cart(request):
 # =========================
 # ORDER
 # =========================
-class OrderViewSet(viewsets.ModelViewSet):
-    queryset = Order.objects.all()
-    serializer_class = OrderSerializer
-    permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
-        # Customer sees only their orders
-        if not self.request.user.is_vendor:
-            return Order.objects.filter(user=self.request.user)
-
-        # Vendor sees orders related to their products
-        return Order.objects.filter(
-            orderitem__vendor__user=self.request.user
-        ).distinct()
-
-    def perform_update(self, serializer):
-        if not self.request.user.is_vendor:
-            raise PermissionDenied("Only vendors can update order status.")
-        serializer.save()
 
 
 # =========================
@@ -244,6 +207,120 @@ def vendor_dashboard(request):
 
 
 
+
+class OrderViewSet(viewsets.ModelViewSet):
+    serializer_class = OrderSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+
+        # Buyer → their orders
+        if not user.is_vendor:
+            return Order.objects.filter(user=user)
+
+        # Vendor → orders with their products
+        return Order.objects.filter(
+            orderitem__vendor__user=user
+        ).distinct()
+
+
+    @action(detail=False, methods=["post"])
+    def create_order(self, request):
+        user = request.user
+
+        try:
+            cart = user.cart
+        except Cart.DoesNotExist:
+            return Response({"error": "Cart not found"}, status=400)
+
+        cart_items = cart.items.all()
+
+        if not cart_items.exists():
+            return Response({"error": "Cart is empty"}, status=400)
+
+        with transaction.atomic():
+            total_price = 0
+
+            # 🔥 Validate items
+            for item in cart_items:
+                product = item.product
+
+                # ❌ Vendor cannot buy own product
+                if user.is_vendor and product.vendor.user == user:
+                    return Response({
+                        "error": f"You cannot order your own product: {product.name}"
+                    }, status=400)
+
+                # ❌ Not available
+                if not product.is_available:
+                    return Response({
+                        "error": f"{product.name} is not available"
+                    }, status=400)
+
+                # ❌ Stock check
+                if product.stock < item.quantity:
+                    return Response({
+                        "error": f"Not enough stock for {product.name}"
+                    }, status=400)
+
+                total_price += product.price * item.quantity
+
+            # 🔥 Create Order
+            order = Order.objects.create(
+                user=user,
+                total_price=total_price
+            )
+
+            # 🔥 Create OrderItems + reduce stock
+            order_items = []
+
+            for item in cart_items:
+                product = item.product
+
+                product.stock -= item.quantity
+                product.save()
+
+                order_items.append(OrderItem(
+                    order=order,
+                    vendor=product.vendor,
+                    product=product,
+                    price=product.price,
+                    quantity=item.quantity
+                ))
+
+            OrderItem.objects.bulk_create(order_items)
+
+            # 🔥 Clear cart
+            cart_items.delete()
+
+        serializer = self.get_serializer(order)
+        return Response(serializer.data, status=201)
+
+    @action(detail=True, methods=["patch"])
+    def update_status(self, request, pk=None):
+        order = self.get_object()
+        user = request.user
+
+        # ❌ Only vendors
+        if not user.is_vendor:
+            return Response({"error": "Only vendors can update order"}, status=403)
+
+        # ❌ Not their order
+        if not order.orderitem_set.filter(vendor__user=user).exists():
+            return Response({"error": "Not your order"}, status=403)
+
+        status_value = request.data.get("status")
+
+        valid_status = [choice[0] for choice in Order.STATUS_CHOICES]
+
+        if status_value not in valid_status:
+            return Response({"error": "Invalid status"}, status=400)
+
+        order.status = status_value
+        order.save()
+
+        return Response({"message": "Order status updated"})
 
 
 
