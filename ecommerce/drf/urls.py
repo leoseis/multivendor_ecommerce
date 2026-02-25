@@ -2,7 +2,7 @@ from django.urls import path, include
 from rest_framework_simplejwt.views import TokenRefreshView
 from rest_framework.routers import DefaultRouter
 from . import views
-from .views import ProductViewSet, OrderViewSet
+from .views import ProductViewSet, OrderViewSet,initialize_payment, verify_payment
 
 router = DefaultRouter()
 router.register("products", ProductViewSet, basename="products")
@@ -27,4 +27,9 @@ urlpatterns = [
 
     # ROUTER URLs
     path("", include(router.urls)),
+    # initialize payment
+    path('initialize/', initialize_payment),
+     path('verify/<str:reference>/', verify_payment),
+
+    
 ]

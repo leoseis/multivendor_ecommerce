@@ -7,8 +7,14 @@ from rest_framework.exceptions import PermissionDenied
 from django.db import transaction
 from django.contrib.auth import authenticate, get_user_model
 from rest_framework_simplejwt.tokens import RefreshToken
+import requests
+import uuid
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from django.conf import settings
 
-from .models import Vendor, Product, Cart, CartItem, Order, OrderItem, Review
+from .models import Vendor, Product, Cart, CartItem, Order, OrderItem, Review,Payment
 from .serializers import (
     RegisterSerializer,
     UserSerializer,
@@ -321,6 +327,80 @@ class OrderViewSet(viewsets.ModelViewSet):
         order.save()
 
         return Response({"message": "Order status updated"})
+    
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def initialize_payment(request):
+    amount = request.data.get("amount")
+    email = request.user.email
+
+    reference = str(uuid.uuid4())
+
+    url = f"{settings.PAYSTACK_BASE_URL}/transaction/initialize"
+
+    headers = {
+        "Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    data = {
+        "email": email,
+        "amount": amount,
+        "reference": reference,
+        "callback_url": "http://localhost:3000/payment-success"
+    }
+
+    response = requests.post(url, json=data, headers=headers)
+    res_data = response.json()
+
+    if res_data["status"]:
+        Payment.objects.create(
+            user=request.user,
+            amount=amount,
+            reference=reference,
+            email=email
+        )
+
+        return Response({
+            "authorization_url": res_data["data"]["authorization_url"],
+            "reference": reference
+        })
+    else:
+        return Response({"error": "Payment initialization failed"}, status=400)
+    
+
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def verify_payment(request, reference):
+    url = f"{settings.PAYSTACK_BASE_URL}/transaction/verify/{reference}"
+
+    headers = {
+        "Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}"
+    }
+
+    response = requests.get(url, headers=headers)
+    res_data = response.json()
+
+    try:
+        payment = Payment.objects.get(reference=reference)
+    except Payment.DoesNotExist:
+        return Response({"error": "Payment not found"}, status=404)
+
+    if res_data["data"]["status"] == "success":
+        payment.verified = True
+        payment.save()
+
+        # 👉 CREATE ORDER HERE (important for ecommerce)
+        # Example:
+        # Order.objects.create(user=payment.user, amount=payment.amount)
+
+        return Response({"message": "Payment verified"})
+    else:
+        return Response({"message": "Payment not successful"})
 
 
 
