@@ -144,8 +144,15 @@ REST_FRAMEWORK = {
 # -----------------------------
 # CORS (React frontend)
 # -----------------------------
+# -----------------------------
+# CORS (React frontend)
+# -----------------------------
 CORS_ALLOWED_ORIGINS = [
-    "https://your-react-app.onrender.com",
+    "https://marketplace-connect.onrender.com",
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://marketplace-connect.onrender.com",
 ]
 # -----------------------------
 # Paystack
@@ -166,5 +173,3 @@ if not DEBUG:
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
 
-
-CORS_ALLOW_ALL_ORIGINS = True
